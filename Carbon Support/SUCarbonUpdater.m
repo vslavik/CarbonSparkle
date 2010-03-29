@@ -72,7 +72,7 @@ static  OSStatus  _SparkleEventHandler( EventHandlerCallRef inCallRef, EventRef 
 	return( err );
 }
 
-EventTargetRef	SUGetSparkleDefaultEventTarget( void )
+static EventTargetRef	SUGetSparkleDefaultEventTarget( void )
 {
 #ifdef __LP64__
 	return GetEventDispatcherTarget();
@@ -201,8 +201,10 @@ Boolean SUSparkleIsUpdateInProgress( void )
 {
 	// Slightly different quit mechanism for Carbon applications.
 	OSStatus	quitResult = eventNotHandledErr;
-	HICommand	quitCommand = { kEventAttributeNone, kHICommandSparkleQuitApplication };
 	
+    HICommand quitCommand;
+    quitCommand.commandID = kHICommandSparkleQuitApplication;
+    
 	// First send custom Sparkle HICommand
 	quitResult = ProcessHICommand( &quitCommand );
 	
@@ -233,41 +235,39 @@ Boolean SUSparkleIsUpdateInProgress( void )
 // Called in response to an update dialog
 - (void)updateAlert:(SUUpdateAlert *)updateAlert finishedWithChoice:(SUUpdateAlertChoice)updateChoice
 {
-	HICommand		updateCommand = { kEventAttributeNone, kHICommandSparkleDownloadingUpdate };
-	HICommand		remindCommand = { kEventAttributeNone, kHICommandSparkleUpdateRemindLater };
-	HICommand		skipItCommand = { kEventAttributeNone, kHICommandSparkleUpdateSkipVersion };
-	
-	HICommand		commandActual;
+	HICommand		command;
 	
 	switch ( updateChoice ) {
 		case SUInstallUpdateChoice:
-			commandActual = updateCommand;
+			command.commandID = kHICommandSparkleDownloadingUpdate;
 			break;
 		case SURemindMeLaterChoice:
-			commandActual = remindCommand;
+			command.commandID = kHICommandSparkleUpdateRemindLater;
 			break;
 		case SUSkipThisVersionChoice:
-			commandActual = skipItCommand;
+			command.commandID = kHICommandSparkleUpdateSkipVersion;
 			break;
 		default:
-			commandActual = updateCommand;
+			command.commandID = kHICommandSparkleDownloadingUpdate;
 			break;
 	}
 	
-	ProcessHICommand( &commandActual );
+	ProcessHICommand( &command );
 }
 
 // Called when -abortUpdate is called.
 - (void)updaterDidAbandonUpdate:(SUUpdater *)updater
 {
-	HICommand	aCommand = { kEventAttributeNone, kHICommandSparkleDownloadAbandoned };
+	HICommand	aCommand;
+    aCommand.commandID = kHICommandSparkleDownloadAbandoned;
 	ProcessHICommand( &aCommand );
 }
 
 // Called when the update panel has been shown
 - (void)updaterDidShowUpdatePanel:(SUUpdater *)updater
 {
-	HICommand	uCommand = { kEventAttributeNone, kHICommandSparkleUpdateShowPanel };
+	HICommand	uCommand;
+    uCommand.commandID = kHICommandSparkleUpdateShowPanel;
 	ProcessHICommand( &uCommand );
 }
 
