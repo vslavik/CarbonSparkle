@@ -9,7 +9,7 @@
 #import "SUUpdateDriver.h"
 #import "SUUpdater.h"
 
-NSString *SUUpdateDriverFinishedNotification = @"SUUpdateDriverFinished";
+NSString * const SUUpdateDriverFinishedNotification = @"SUUpdateDriverFinished";
 
 @implementation SUUpdateDriver
 - initWithUpdater:(SUUpdater *)anUpdater

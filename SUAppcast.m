@@ -20,7 +20,7 @@
 {
 	[items release];
 	[userAgentString release];
-	[incrementalData release];
+	[download release];
 	[super dealloc];
 }
 
@@ -35,26 +35,40 @@
     if (userAgentString)
         [request setValue:userAgentString forHTTPHeaderField:@"User-Agent"];
             
-    incrementalData = [[NSMutableData alloc] init];
-    NSURLConnection *connection = [NSURLConnection connectionWithRequest:request delegate:self];
-    CFRetain(connection);
+    download = [[NSURLDownload alloc] initWithRequest:request delegate:self];
 }
 
-- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data
+- (void)download:(NSURLDownload *)aDownload decideDestinationWithSuggestedFilename:(NSString *)filename
 {
-	[incrementalData appendData:data];
+	NSString* destinationFilename = NSTemporaryDirectory();
+	if (destinationFilename)
+	{
+		destinationFilename = [destinationFilename stringByAppendingPathComponent:filename];
+		[download setDestination:destinationFilename allowOverwrite:NO];
+	}
 }
 
-- (void)connectionDidFinishLoading:(NSURLConnection *)connection
+- (void)download:(NSURLDownload *)aDownload didCreateDestination:(NSString *)path
 {
-	CFRelease(connection);
-    
+    [downloadFilename release];
+    downloadFilename = [path copy];
+}
+
+- (void)downloadDidFinish:(NSURLDownload *)aDownload
+{    
 	NSError *error = nil;
-    NSXMLDocument *document = [[NSXMLDocument alloc] initWithData:incrementalData options:0 error:&error];
+    NSXMLDocument *document = [[[NSXMLDocument alloc] initWithContentsOfURL:[NSURL fileURLWithPath:downloadFilename] options:0 error:&error] autorelease];
 	BOOL failed = NO;
 	NSArray *xmlItems = nil;
 	NSMutableArray *appcastItems = [NSMutableArray array];
-	
+#if MAC_OS_X_VERSION_MIN_REQUIRED <= MAC_OS_X_VERSION_10_4
+    [[NSFileManager defaultManager] removeFileAtPath:downloadFilename handler:nil];
+#else
+    [[NSFileManager defaultManager] removeItemAtPath:downloadFilename error:nil];
+#endif
+    [downloadFilename release];
+    downloadFilename = nil;
+    
     if (nil == document)
     {
         failed = YES;
@@ -130,22 +144,20 @@
 				}
             }
             
-			SUAppcastItem *anItem = [[SUAppcastItem alloc] initWithDictionary:dict];
+			NSString *errString;
+			SUAppcastItem *anItem = [[[SUAppcastItem alloc] initWithDictionary:dict failureReason:&errString] autorelease];
             if (anItem)
             {
                 [appcastItems addObject:anItem];
-                [anItem release];
 			}
             else
             {
-				NSLog(@"Sparkle Updater: Failed to parse appcast item with appcast dictionary %@!", dict);
+				NSLog(@"Sparkle Updater: Failed to parse appcast item: %@.\nAppcast dictionary was: %@", errString, dict);
             }
             [nodesDict removeAllObjects];
             [dict removeAllObjects];
 		}
 	}
-    
-	[document release];
 	
 	if ([appcastItems count])
     {
@@ -164,14 +176,23 @@
 	}
 }
 
-- (void)connection:(NSURLConnection*)connection didFailWithError:(NSError *)error
+- (void)download:(NSURLDownload *)aDownload didFailWithError:(NSError *)error
 {
-	CFRelease(connection);
+	if (downloadFilename)
+	{
+#if MAC_OS_X_VERSION_MIN_REQUIRED <= MAC_OS_X_VERSION_10_4
+		[[NSFileManager defaultManager] removeFileAtPath:downloadFilename handler:nil];
+#else
+		[[NSFileManager defaultManager] removeItemAtPath:downloadFilename error:nil];
+#endif
+	}
+    [downloadFilename release];
+    downloadFilename = nil;
     
 	[self reportError:error];
 }
 
-- (NSURLRequest *)connection:(NSURLConnection *)connection willSendRequest:(NSURLRequest *)request redirectResponse:(NSURLResponse *)redirectResponse
+- (NSURLRequest *)download:(NSURLDownload *)aDownload willSendRequest:(NSURLRequest *)request redirectResponse:(NSURLResponse *)redirectResponse
 {
 	return request;
 }
@@ -196,11 +217,11 @@
     NSXMLElement *node;
     NSMutableArray *languages = [NSMutableArray array];
     NSString *lang;
-    NSInteger i;
+    NSUInteger i;
     while ((node = [nodeEnum nextObject]))
     {
         lang = [[node attributeForName:@"xml:lang"] stringValue];
-        [languages addObject:(lang ?: @"")];
+        [languages addObject:(lang ? lang : @"")];
     }
     lang = [[NSBundle preferredLocalizationsFromArray:languages] objectAtIndex:0];
     i = [languages indexOfObject:([languages containsObject:lang] ? lang : @"")];

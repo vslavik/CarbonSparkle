@@ -9,10 +9,11 @@
 #import "SUInstaller.h"
 #import "SUPlainInstaller.h"
 #import "SUPackageInstaller.h"
+#import "SUHost.h" 
 
 @implementation SUInstaller
 
-+ (BOOL)_isAliasFolderAtPath:(NSString *)path
++ (BOOL)isAliasFolderAtPath:(NSString *)path
 {
 	FSRef fileRef;
 	OSStatus err = noErr;
@@ -37,6 +38,7 @@
 	// Search subdirectories for the application
 	NSString *currentFile, *newAppDownloadPath = nil, *bundleFileName = [[host bundlePath] lastPathComponent], *alternateBundleFileName = [[host name] stringByAppendingPathExtension:[[host bundlePath] pathExtension]];
 	BOOL isPackage = NO;
+	NSString *fallbackPackagePath = nil;
 	NSDirectoryEnumerator *dirEnum = [[NSFileManager defaultManager] enumeratorAtPath:updateFolder];
 	while ((currentFile = [dirEnum nextObject]))
 	{
@@ -48,27 +50,49 @@
 			newAppDownloadPath = currentPath;
 			break;
 		}
-		else if (([[currentFile pathExtension] isEqualToString:@"pkg"] || [[currentFile pathExtension] isEqualToString:@"mpkg"]) &&
-				 [[[currentFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:[bundleFileName stringByDeletingPathExtension]])
+		else if ([[currentFile pathExtension] isEqualToString:@"pkg"] ||
+				 [[currentFile pathExtension] isEqualToString:@"mpkg"])
 		{
-			isPackage = YES;
-			newAppDownloadPath = currentPath;
-			break;
+			if ([[[currentFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:[bundleFileName stringByDeletingPathExtension]])
+			{
+				isPackage = YES;
+				newAppDownloadPath = currentPath;
+				break;
+			}
+			else
+			{
+				// Remember any other non-matching packages we have seen should we need to use one of them as a fallback.
+				fallbackPackagePath = currentPath;
+			}
+		}
+		else
+		{
+			// Try matching on bundle identifiers in case the user has changed the name of the host app
+			NSBundle *incomingBundle = [NSBundle bundleWithPath:currentPath];
+			if(incomingBundle && [[incomingBundle bundleIdentifier] isEqualToString:[[host bundle] bundleIdentifier]])
+			{
+				isPackage = NO;
+				newAppDownloadPath = currentPath;
+				break;
+			}
 		}
 		
-		// Some DMGs have symlinks into /Applications! That's no good! And there's no point in looking in bundles.
-		if ([self _isAliasFolderAtPath:currentPath] ||
-			[[currentFile pathExtension] isEqualToString:[[host bundlePath] pathExtension]] ||
-			[[currentFile pathExtension] isEqualToString:@"pkg"] ||
-			[[currentFile pathExtension] isEqualToString:@"mpkg"])
-		{
+		// Some DMGs have symlinks into /Applications! That's no good!
+		if ([self isAliasFolderAtPath:currentPath])
 			[dirEnum skipDescendents];
-		}		
+	}
+
+	// We don't have a valid path. Try to use the fallback package.
+
+	if (newAppDownloadPath == nil && fallbackPackagePath != nil)
+	{
+		isPackage = YES;
+		newAppDownloadPath = fallbackPackagePath;
 	}
 	
 	if (newAppDownloadPath == nil)
 	{
-		[self _finishInstallationWithResult:NO host:host error:[NSError errorWithDomain:SUSparkleErrorDomain code:SUMissingUpdateError userInfo:[NSDictionary dictionaryWithObject:@"Couldn't find an appropriate update in the downloaded package." forKey:NSLocalizedDescriptionKey]] delegate:delegate];
+		[self finishInstallationWithResult:NO host:host error:[NSError errorWithDomain:SUSparkleErrorDomain code:SUMissingUpdateError userInfo:[NSDictionary dictionaryWithObject:@"Couldn't find an appropriate update in the downloaded package." forKey:NSLocalizedDescriptionKey]] delegate:delegate];
 	}
 	else
 	{
@@ -76,19 +100,27 @@
 	}
 }
 
-+ (void)_mdimportHost:(SUHost *)host
++ (void)mdimportHost:(SUHost *)host
 {
 	NSTask *mdimport = [[[NSTask alloc] init] autorelease];
 	[mdimport setLaunchPath:@"/usr/bin/mdimport"];
 	[mdimport setArguments:[NSArray arrayWithObject:[host bundlePath]]];
-	[mdimport launch];
+	@try
+	{
+		[mdimport launch];
+	}
+	@catch (NSException * launchException)
+	{
+		// No big deal.
+		NSLog(@"Sparkle Error: %@", [launchException description]);
+	}
 }
 
-+ (void)_finishInstallationWithResult:(BOOL)result host:(SUHost *)host error:(NSError *)error delegate:delegate
++ (void)finishInstallationWithResult:(BOOL)result host:(SUHost *)host error:(NSError *)error delegate:delegate
 {
-	if (result == YES)
+	if (result)
 	{
-		[self _mdimportHost:host];
+		[self mdimportHost:host];
 		if ([delegate respondsToSelector:@selector(installerFinishedForHost:)])
 			[delegate installerFinishedForHost:host];
 	}
