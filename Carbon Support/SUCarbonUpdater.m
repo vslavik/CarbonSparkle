@@ -95,7 +95,6 @@ void SUSparkleInitializeForCarbon( void )
 
 		aPool = [[NSAutoreleasePool alloc] init];
 		g_SharedSUUpdater = [[SUCarbonUpdater alloc] init];
-		[g_SharedSUUpdater applicationDidFinishLaunching:nil];
 		[aPool release];
 	}
 }
