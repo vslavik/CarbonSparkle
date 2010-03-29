@@ -48,7 +48,7 @@ static  OSStatus  _SparkleEventHandler( EventHandlerCallRef inCallRef, EventRef 
 		GetEventParameter( inEvent, kEventParamDirectObject, typeHICommand, NULL, sizeof(HICommand), NULL, &command );
 		if ( command.commandID == kHICommandSparkleCheckForUpdates )
 		{
-#if !__LP64__
+#ifndef __LP64__
 			if( command.attributes & kHICommandFromMenu )
 			{
 				if( SUSparkleIsUpdateInProgress() ) DisableMenuItem( command.menu.menuRef, command.menu.menuItemIndex );
@@ -74,7 +74,7 @@ static  OSStatus  _SparkleEventHandler( EventHandlerCallRef inCallRef, EventRef 
 
 EventTargetRef	SUGetSparkleDefaultEventTarget( void )
 {
-#if __LP64__
+#ifdef __LP64__
 	return GetEventDispatcherTarget();
 #else
 	return GetApplicationEventTarget();
