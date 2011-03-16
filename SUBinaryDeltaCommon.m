@@ -60,7 +60,7 @@ static void _hashOfFile(unsigned char* hash, FTSENT *ent)
 {
     if (ent->fts_info == FTS_SL) {
         char linkDestination[MAXPATHLEN + 1];
-        size_t linkDestinationLength = readlink(ent->fts_path, linkDestination, MAXPATHLEN);
+        ssize_t linkDestinationLength = readlink(ent->fts_path, linkDestination, MAXPATHLEN);
         if (linkDestinationLength < 0) {
             perror("readlink");
             return;
@@ -78,6 +78,12 @@ static void _hashOfFile(unsigned char* hash, FTSENT *ent)
         }
 
         size_t fileSize = (size_t)ent->fts_statp->st_size;
+        if (fileSize == 0) {
+            _hashOfBuffer(hash, NULL, 0);
+            close(fileDescriptor);
+            return;
+        }
+		
         void *buffer = mmap(0, fileSize, PROT_READ, MAP_FILE | MAP_PRIVATE, fileDescriptor, 0);
         if (buffer == (void*)-1) {
             close(fileDescriptor);

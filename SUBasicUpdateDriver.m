@@ -318,7 +318,7 @@
 	if ([[updater delegate] respondsToSelector:@selector(doQuitApplication)])
 		[[updater delegate] doQuitApplication];
 	else
-		[NSApp terminate:self];
+		[NSApp terminate:nil];
 }
 
 - (void)cleanUp

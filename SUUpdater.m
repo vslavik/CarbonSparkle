@@ -56,6 +56,11 @@ static NSString * const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefault
 {
 	self = [super init];
     if (bundle == nil) bundle = [NSBundle mainBundle];
+	
+	// Register as observer straight away to avoid exceptions on -dealloc when -unregisterAsObserver is called:
+	if (self)
+		[self registerAsObserver];
+	
 	id updater = [sharedUpdaters objectForKey:[NSValue valueWithNonretainedObject:bundle]];
     if (updater)
 	{
@@ -68,7 +73,6 @@ static NSString * const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefault
             sharedUpdaters = [[NSMutableDictionary alloc] init];
         [sharedUpdaters setObject:self forKey:[NSValue valueWithNonretainedObject:bundle]];
         host = [[SUHost alloc] initWithBundle:bundle];
-        [self registerAsObserver];
 		
 		// Saving-the-developer-from-a-stupid-mistake-check:
 		if (![[[self feedURL] scheme] isEqualToString:@"https"] && ![host publicDSAKey])
@@ -210,22 +214,22 @@ static NSString * const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefault
 - (void)registerAsObserver
 {
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateDriverDidFinish:) name:SUUpdateDriverFinishedNotification object:nil];
-    // No sense observing the shared NSUserDefaultsController when we're not updating the main bundle.
-    if ([host bundle] != [NSBundle mainBundle]) return;
     [[NSUserDefaultsController sharedUserDefaultsController] addObserver:self forKeyPath:[@"values." stringByAppendingString:SUScheduledCheckIntervalKey] options:0 context:SUUpdaterDefaultsObservationContext];
     [[NSUserDefaultsController sharedUserDefaultsController] addObserver:self forKeyPath:[@"values." stringByAppendingString:SUEnableAutomaticChecksKey] options:0 context:SUUpdaterDefaultsObservationContext];
 }
 
 - (void)unregisterAsObserver
 {
-	[[NSNotificationCenter defaultCenter] removeObserver:self];
-    // Removing self as a KVO observer if no observer was registered leads to an NSException. But we don't care.
 	@try
 	{
+		[[NSNotificationCenter defaultCenter] removeObserver:self];
 		[[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUScheduledCheckIntervalKey]];
 		[[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUEnableAutomaticChecksKey]];
 	}
-	@catch (NSException *e) { }
+	@catch (NSException *e)
+	{
+		NSLog(@"Sparkle Error: [SUUpdater unregisterAsObserver] called, but the updater wasn't registered as an observer.");
+	}
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
@@ -358,7 +362,7 @@ static NSString * const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefault
 	NSEnumerator *profileInfoEnumerator = [parameters objectEnumerator];
 	NSDictionary *currentProfileInfo;
 	while ((currentProfileInfo = [profileInfoEnumerator nextObject]))
-		[parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", [currentProfileInfo objectForKey:@"key"], [currentProfileInfo objectForKey:@"value"]]];
+		[parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", [[[currentProfileInfo objectForKey:@"key"] description] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding], [[[currentProfileInfo objectForKey:@"value"] description] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]]];
 	
 	NSString *separatorCharacter = @"?";
 	if ([baseFeedURL query])
@@ -366,7 +370,7 @@ static NSString * const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefault
 	NSString *appcastStringWithProfile = [NSString stringWithFormat:@"%@%@%@", [baseFeedURL absoluteString], separatorCharacter, [parameterStrings componentsJoinedByString:@"&"]];
 	
 	// Clean it up so it's a valid URL
-	return [NSURL URLWithString:[appcastStringWithProfile stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+	return [NSURL URLWithString:appcastStringWithProfile];
 }
 
 - (void)setUpdateCheckInterval:(NSTimeInterval)updateCheckInterval
