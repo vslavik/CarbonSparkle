@@ -30,10 +30,12 @@ NSString * const SUUpdateDriverFinishedNotification = @"SUUpdateDriverFinished";
 - (void)abortUpdate
 {
 	[self setValue:[NSNumber numberWithBool:YES] forKey:@"finished"];	
-	[[NSNotificationCenter defaultCenter] postNotificationName:SUUpdateDriverFinishedNotification object:self];
-	
+
 	if ([[updater delegate] respondsToSelector:@selector(updaterDidAbandonUpdate:)])
 		[[updater delegate] updaterDidAbandonUpdate:updater];
+
+	// This must be done last, SUUpdater::updateDriverDidFinish will release this driver
+	[[NSNotificationCenter defaultCenter] postNotificationName:SUUpdateDriverFinishedNotification object:self];
 }
 
 - (BOOL)finished { return finished; }
