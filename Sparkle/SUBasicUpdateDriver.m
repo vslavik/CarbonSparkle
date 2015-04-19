@@ -56,6 +56,7 @@
 
     [appcast setDelegate:self];
     [appcast setUserAgentString:[self.updater userAgentString]];
+    [appcast setHttpHeaders:[self.updater httpHeaders]];
     [appcast fetchAppcastFromURL:URL];
 }
 
@@ -136,12 +137,10 @@
             item = [updateEnumerator nextObject];
         } while (item && ![self hostSupportsItem:item]);
 
-        if (binaryDeltaSupported()) {
-            SUAppcastItem *deltaUpdateItem = [item deltaUpdates][[self.host version]];
-            if (deltaUpdateItem && [self hostSupportsItem:deltaUpdateItem]) {
-                self.nonDeltaUpdateItem = item;
-                item = deltaUpdateItem;
-            }
+        SUAppcastItem *deltaUpdateItem = [item deltaUpdates][[self.host version]];
+        if (deltaUpdateItem && [self hostSupportsItem:deltaUpdateItem]) {
+            self.nonDeltaUpdateItem = item;
+            item = deltaUpdateItem;
         }
     }
 
@@ -200,11 +199,11 @@
     NSString *downloadFileName = [NSString stringWithFormat:@"%@ %@", [self.host name], [self.updateItem versionString]];
 
 
-    self.tempDir = [[self.host appSupportPath] stringByAppendingPathComponent:downloadFileName];
+    self.tempDir = [self.host.appCachePath stringByAppendingPathComponent:downloadFileName];
     int cnt = 1;
 	while ([[NSFileManager defaultManager] fileExistsAtPath:self.tempDir] && cnt <= 999)
 	{
-        self.tempDir = [[self.host appSupportPath] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@ %d", downloadFileName, cnt++]];
+        self.tempDir = [self.host.appCachePath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@ %d", downloadFileName, cnt++]];
     }
 
     // Create the temporary directory if necessary.
@@ -303,8 +302,6 @@
     [self abortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUUnarchivingError userInfo:@{ NSLocalizedDescriptionKey: SULocalizedString(@"An error occurred while extracting the archive. Please try again later.", nil) }]];
 }
 
-- (BOOL)shouldInstallSynchronously { return NO; }
-
 - (void)installWithToolAndRelaunch:(BOOL)relaunch
 {
     // Perhaps a poor assumption but: if we're not relaunching, we assume we shouldn't be showing any UI either. Because non-relaunching installations are kicked off without any user interaction, we shouldn't be interrupting them.
@@ -358,7 +355,7 @@
     NSString *const relaunchPathToCopy = [sparkleBundle pathForResource:[[sparkleBundle infoDictionary] objectForKey:SURelaunchToolNameKey] ofType:@"app"];
 	if (relaunchPathToCopy != nil)
 	{
-        NSString *targetPath = [[self.host appSupportPath] stringByAppendingPathComponent:[relaunchPathToCopy lastPathComponent]];
+        NSString *targetPath = [self.host.appCachePath stringByAppendingPathComponent:[relaunchPathToCopy lastPathComponent]];
         // Only the paranoid survive: if there's already a stray copy of relaunch there, we would have problems.
         NSError *error = nil;
         [[NSFileManager defaultManager] createDirectoryAtPath:[targetPath stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:@{} error:&error];
