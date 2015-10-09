@@ -43,7 +43,7 @@ SUBinaryDeltaMinorVersion latestMinorVersionForMajorVersion(SUBinaryDeltaMajorVe
         case SUBeigeMajorVersion:
             return SUBeigeMinorVersion;
     }
-    return 0;
+    return (SUBinaryDeltaMinorVersion)0;
 }
 
 NSString *temporaryFilename(NSString *base)
@@ -144,8 +144,11 @@ NSData *hashOfFileContents(FTSENT *ent)
 
 NSString *hashOfTreeWithVersion(NSString *path, uint16_t majorVersion)
 {
-    const char *sourcePaths[] = {[path fileSystemRepresentation], 0};
-    FTS *fts = fts_open((char* const*)sourcePaths, FTS_PHYSICAL | FTS_NOCHDIR, compareFiles);
+    char pathBuffer[PATH_MAX] = {0};
+    [path getFileSystemRepresentation:pathBuffer maxLength:sizeof(pathBuffer)];
+
+    char * const sourcePaths[] = {pathBuffer, 0};
+    FTS *fts = fts_open(sourcePaths, FTS_PHYSICAL | FTS_NOCHDIR, compareFiles);
     if (!fts) {
         perror("fts_open");
         return nil;

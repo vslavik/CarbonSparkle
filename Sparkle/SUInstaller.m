@@ -44,8 +44,8 @@ static NSString *sUpdateFolder = nil;
 
 + (NSString *)installSourcePathInUpdateFolder:(NSString *)inUpdateFolder forHost:(SUHost *)host isPackage:(BOOL *)isPackagePtr isGuided:(BOOL *)isGuidedPtr
 {
-    NSParameterAssert(inUpdateFolder);
-    NSParameterAssert(host);
+    SUParameterAssert(inUpdateFolder);
+    SUParameterAssert(host);
 
     // Search subdirectories for the application
     NSString *currentFile,
@@ -84,7 +84,8 @@ static NSString *sUpdateFolder = nil;
         } else {
             // Try matching on bundle identifiers in case the user has changed the name of the host app
             NSBundle *incomingBundle = [NSBundle bundleWithPath:currentPath];
-            if (incomingBundle && [[incomingBundle bundleIdentifier] isEqualToString:[[host bundle] bundleIdentifier]]) {
+            NSString *hostBundleIdentifier = host.bundle.bundleIdentifier;
+            if (incomingBundle && [incomingBundle.bundleIdentifier isEqualToString:hostBundleIdentifier]) {
                 isPackage = NO;
                 newAppDownloadPath = currentPath;
                 break;
@@ -119,13 +120,6 @@ static NSString *sUpdateFolder = nil;
         SULog(@"Searched %@ for %@.(app|pkg)", inUpdateFolder, bundleFileNameNoExtension);
     }
     return newAppDownloadPath;
-}
-
-+ (NSString *)appPathInUpdateFolder:(NSString *)updateFolder forHost:(SUHost *)host
-{
-    BOOL isPackage = NO;
-    NSString *path = [self installSourcePathInUpdateFolder:updateFolder forHost:host isPackage:&isPackage isGuided:nil];
-    return isPackage ? nil : path;
 }
 
 + (void)installFromUpdateFolder:(NSString *)inUpdateFolder overHost:(SUHost *)host installationPath:(NSString *)installationPath versionComparator:(id<SUVersionComparison>)comparator completionHandler:(void (^)(NSError *))completionHandler
