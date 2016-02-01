@@ -40,9 +40,6 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (void)updateDriverDidFinish:(NSNotification *)note;
 @property (readonly, copy) NSURL *parameterizedFeedURL;
 
-- (void)notifyWillShowModalAlert;
-- (void)notifyDidShowModalAlert;
-
 @property (strong) SUUpdateDriver *driver;
 @property (strong) SUHost *host;
 
@@ -57,6 +54,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 @synthesize driver;
 @synthesize host;
 @synthesize sparkleBundle;
+@synthesize decryptionPassword;
 
 static NSMutableDictionary *sharedUpdaters = nil;
 static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaultsObservationContext";
@@ -83,7 +81,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
     self = [super init];
     if (bundle == nil) bundle = [NSBundle mainBundle];
 
-    self.sparkleBundle = [NSBundle bundleForClass:[self class]];
+    // Use explicit class to use the correct bundle even when subclassed
+    self.sparkleBundle = [NSBundle bundleForClass:[SUUpdater class]];
     if (!self.sparkleBundle) {
         SULog(@"Error: SUUpdater can't find Sparkle.framework it belongs to");
         return nil;
@@ -107,30 +106,45 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
         sharedUpdaters[[NSValue valueWithNonretainedObject:bundle]] = self;
         host = [[SUHost alloc] initWithBundle:bundle];
 
-        // Saving-the-developer-from-a-stupid-mistake-check:
-        BOOL hasPublicDSAKey = [host publicDSAKey] != nil;
-        BOOL isMainBundle = [bundle isEqualTo:[NSBundle mainBundle]];
-        BOOL hostIsCodeSigned = [SUCodeSigningVerifier hostApplicationIsCodeSigned];
-        if (!isMainBundle && !hasPublicDSAKey) {
-            [self notifyWillShowModalAlert];
-            NSAlert *alert = [[NSAlert alloc] init];
-            alert.messageText = @"Insecure update error!";
-            alert.informativeText = @"For security reasons, you need to sign your updates with a DSA key. See Sparkle's documentation for more information.";
-            [alert runModal];
-            [self notifyDidShowModalAlert];
-        } else if (isMainBundle && !(hasPublicDSAKey || hostIsCodeSigned)) {
-            [self notifyWillShowModalAlert];
-            NSAlert *alert = [[NSAlert alloc] init];
-            alert.messageText = @"Insecure update error!";
-            alert.informativeText = @"For security reasons, you need to code sign your application or sign your updates with a DSA key. See Sparkle's documentation for more information.";
-            [alert runModal];
-            [self notifyDidShowModalAlert];
-        }
-
         // This runs the permission prompt if needed, but never before the app has finished launching because the runloop won't run before that
         [self performSelector:@selector(startUpdateCycle) withObject:nil afterDelay:0];
     }
     return self;
+}
+
+-(void)showAlertText:(NSString *)text informativeText:(NSString *)informativeText {
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = text;
+    alert.informativeText = informativeText;
+    [self.driver showAlert:alert];
+}
+
+-(void)checkIfConfiguredProperly {
+    BOOL hasPublicDSAKey = [self.host publicDSAKey] != nil;
+    BOOL isMainBundle = [self.host.bundle isEqualTo:[NSBundle mainBundle]];
+    BOOL hostIsCodeSigned = [SUCodeSigningVerifier hostApplicationIsCodeSigned];
+    NSURL *feedURL = [self feedURL];
+    BOOL servingOverHttps = [[[feedURL scheme] lowercaseString] isEqualToString:@"https"];
+    if (!isMainBundle && !hasPublicDSAKey) {
+        [self showAlertText:@"Insecure update error!"
+                 informativeText:@"For security reasons, you need to sign your updates with a DSA key. See Sparkle's documentation for more information."];
+    } else if (isMainBundle && !(hasPublicDSAKey || hostIsCodeSigned)) {
+        [self showAlertText:@"Insecure update error!"
+                 informativeText:@"For security reasons, you need to code sign your application or sign your updates with a DSA key. See Sparkle's documentation for more information."];
+    } else if (isMainBundle && !hasPublicDSAKey && !servingOverHttps) {
+        SULog(@"WARNING: Serving updates over HTTP without signing them with a DSA key is deprecated and may not be possible in a future release. Please serve your updates over https, or sign them with a DSA key, or do both. See Sparkle's documentation for more information.");
+    }
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
+    BOOL atsExceptionsExist = nil != [self.host objectForInfoDictionaryKey:@"NSAppTransportSecurity"];
+    if (isMainBundle && !servingOverHttps && !atsExceptionsExist) {
+        [self showAlertText:@"Insecure feed URL is blocked in OS X 10.11"
+                 informativeText:[NSString stringWithFormat:@"You must change the feed URL (%@) to use HTTPS or disable App Transport Security.\n\nFor more information:\nhttp://sparkle-project.org/documentation/app-transport-security/", [feedURL absoluteString]]];
+    }
+    if (!isMainBundle && !servingOverHttps) {
+        SULog(@"WARNING: Serving updates over HTTP may be blocked in OS X 10.11. Please change the feed URL (%@) to use HTTPS. For more information:\nhttp://sparkle-project.org/documentation/app-transport-security/", feedURL);
+    }
+#endif
 }
 
 
@@ -141,21 +155,6 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 }
 
 - (NSString *)description { return [NSString stringWithFormat:@"%@ <%@, %@>", [self class], [self.host bundlePath], [self.host installationPath]]; }
-
-
-- (void)notifyWillShowModalAlert
-{
-    if ([self.delegate respondsToSelector:@selector(updaterWillShowModalAlert:)])
-        [self.delegate updaterWillShowModalAlert:self];
-}
-
-
-- (void)notifyDidShowModalAlert
-{
-    if ([self.delegate respondsToSelector:@selector(updaterDidShowModalAlert:)])
-        [self.delegate updaterDidShowModalAlert:self];
-}
-
 
 - (void)startUpdateCycle
 {
@@ -330,6 +329,17 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
     [self checkForUpdatesWithDriver:[[SUProbingUpdateDriver alloc] initWithUpdater:self]];
 }
 
+- (void)installUpdatesIfAvailable
+{
+    if (self.driver && [self.driver isInterruptible]) {
+        [self.driver abortUpdate];
+    }
+
+    SUUIBasedUpdateDriver *theUpdateDriver = [[SUUserInitiatedUpdateDriver alloc] initWithUpdater:self];
+    theUpdateDriver.automaticallyInstallUpdates = YES;
+    [self checkForUpdatesWithDriver:theUpdateDriver];
+}
+
 - (void)checkForUpdatesWithDriver:(SUUpdateDriver *)d
 {
 	if ([self updateInProgress]) { return; }
@@ -353,6 +363,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
         [self scheduleNextUpdateCheck];
         return;
     }
+
+    [self checkIfConfiguredProperly];
 
     NSURL *theFeedURL = [self parameterizedFeedURL];
     if (theFeedURL) // Use a NIL URL to cancel quietly.
@@ -432,8 +444,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (BOOL)automaticallyDownloadsUpdates
 {
-    // If the SUAllowsAutomaticUpdatesKey exists and is set to NO, return NO.
-    if ([self.host objectForInfoDictionaryKey:SUAllowsAutomaticUpdatesKey] && [self.host boolForInfoDictionaryKey:SUAllowsAutomaticUpdatesKey] == NO) {
+    // If the host doesn't allow automatic updates, don't ever let them happen
+    if (!self.host.allowsAutomaticUpdates) {
         return NO;
     }
 
