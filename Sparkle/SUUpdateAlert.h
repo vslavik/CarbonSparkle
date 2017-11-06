@@ -9,8 +9,7 @@
 #ifndef SUUPDATEALERT_H
 #define SUUPDATEALERT_H
 
-#import <WebKit/WebKit.h>
-#import "SUWindowController.h"
+#import <Cocoa/Cocoa.h>
 #import "SUVersionDisplayProtocol.h"
 
 // WebKit protocols are not explicitly declared until 10.11 SDK, so
@@ -32,7 +31,7 @@ typedef NS_ENUM(NSInteger, SUUpdateAlertChoice) {
 };
 
 @class SUAppcastItem, SUHost;
-@interface SUUpdateAlert : SUWindowController
+@interface SUUpdateAlert : NSWindowController
 
 @property (weak) id<SUVersionDisplay> versionDisplayer;
 
@@ -41,6 +40,7 @@ typedef NS_ENUM(NSInteger, SUUpdateAlertChoice) {
 - (IBAction)installUpdate:sender;
 - (IBAction)skipThisVersion:sender;
 - (IBAction)remindMeLater:sender;
+- (void)disableKeyboardShortcutForInstallButton;
 
 @end
 
