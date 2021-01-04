@@ -7,12 +7,12 @@
 //
 
 #import "SUAppcastDriver.h"
-#import <Sparkle/SUAppcast.h>
+#import "SUAppcast.h"
 #import "SUAppcastItem.h"
-#import <Sparkle/SUVersionComparisonProtocol.h>
+#import "SUVersionComparisonProtocol.h"
 #import "SUStandardVersionComparator.h"
 #import "SUOperatingSystem.h"
-#import <Sparkle/SPUUpdaterDelegate.h>
+#import "SPUUpdaterDelegate.h"
 #import "SUHost.h"
 #import "SUConstants.h"
 
@@ -78,7 +78,7 @@
     SUAppcastItem *nonDeltaUpdateItem = nil;
     
     // Now we have to find the best valid update in the appcast.
-    if ([self.updaterDelegate respondsToSelector:@selector(bestValidUpdateInAppcast:forUpdater:)])
+    if ([self.updaterDelegate respondsToSelector:@selector((bestValidUpdateInAppcast:forUpdater:))])
     {
         item = [self.updaterDelegate bestValidUpdateInAppcast:ac forUpdater:(id _Nonnull)self.updater];
     }
@@ -157,7 +157,7 @@
     id<SUVersionComparison> comparator = nil;
     
     // Give the delegate a chance to provide a custom version comparator
-    if ([self.updaterDelegate respondsToSelector:@selector(versionComparatorForUpdater:)]) {
+    if ([self.updaterDelegate respondsToSelector:@selector((versionComparatorForUpdater:))]) {
         comparator = [self.updaterDelegate versionComparatorForUpdater:(id _Nonnull)self.updater];
     }
     

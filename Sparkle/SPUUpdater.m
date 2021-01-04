@@ -6,12 +6,12 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import <Sparkle/SPUUpdater.h>
+#import "SPUUpdater.h"
 #import "SPUUpdaterDelegate.h"
 #import "SPUUpdaterSettings.h"
 #import "SUHost.h"
-#import <Sparkle/SPUUpdatePermissionRequest.h>
-#import <Sparkle/SUUpdatePermissionResponse.h>
+#import "SPUUpdatePermissionRequest.h"
+#import "SUUpdatePermissionResponse.h"
 #import "SPUUpdateDriver.h"
 #import "SUConstants.h"
 #import "SULog.h"
@@ -24,11 +24,12 @@
 #import "SPUProbeInstallStatus.h"
 #import "SUAppcastItem.h"
 #import "SPUInstallationInfo.h"
-#import <Sparkle/SUErrors.h>
+#import "SUErrors.h"
 #import "SPUXPCServiceInfo.h"
 #import "SPUUpdaterCycle.h"
 #import "SPUUpdaterTimer.h"
 #import "SPUResumableUpdate.h"
+#import "SUSignatures.h"
 
 
 #include "AppKitPrevention.h"
@@ -106,16 +107,24 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 // To prevent subclasses from doing something bad based on older Sparkle code
 - (instancetype)initForBundle:(NSBundle *)__unused bundle
 {
-    SULog(SULogLevelError, @"-[%@ initForBundle:] is not implemented anymore.", NSStringFromClass([self class]));
-    abort();
+    NSString *reason = [NSString stringWithFormat:@"-[%@ initForBundle:] is not implemented anymore in Sparkle 2.", NSStringFromClass([self class])];
+    SULog(SULogLevelError, @"%@", reason);
+    
+    NSException *exception = [NSException exceptionWithName:@"SUIncorrectAPIUsageException" reason:reason userInfo:nil];
+    @throw exception;
+    
     return nil;
 }
 
 // To prevent trying to stick an SUUpdater in a nib or initializing it in an incorrect way
 - (instancetype)init
 {
-    SULog(SULogLevelError, @"-[%@ init] is not implemented. If you want to drop an updater into a nib, see SPUStandardUpdaterController.", NSStringFromClass([self class]));
-    abort();
+    NSString *reason = [NSString stringWithFormat:@"-[%@ init] is not implemented. If you want to drop an updater into a nib, see SPUStandardUpdaterController.", NSStringFromClass([self class])];
+    SULog(SULogLevelError, @"%@", reason);
+    
+    NSException *exception = [NSException exceptionWithName:@"SUIncorrectAPIUsageException" reason:reason userInfo:nil];
+    @throw exception;
+    
     return nil;
 }
 
@@ -199,8 +208,8 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         }
     }
     
-    BOOL hasPublicDSAKey = [self.host publicDSAKey] != nil;
-    if (!hasPublicDSAKey) {
+    BOOL hasPublicKey = self.host.publicKeys.hasAnyKeys;
+    if (!hasPublicKey) {
         // If we failed to retrieve a DSA key but the bundle specifies a path to one, we should consider this a configuration failure
         NSString *publicDSAKeyFileKey = [self.host publicDSAKeyFileKey];
         if (publicDSAKeyFileKey != nil) {
@@ -210,11 +219,11 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
             return NO;
         }
     }
-    
-    if (!hasPublicDSAKey) {
+
+    if (!hasPublicKey) {
         if (!servingOverHttps || ![SUCodeSigningVerifier bundleAtURLIsCodeSigned:[[self hostBundle] bundleURL]]) {
             if (error != NULL) {
-                *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUNoPublicDSAFoundError userInfo:@{ NSLocalizedDescriptionKey: @"For security reasons, updates need to be signed with a DSA key. See Sparkle's documentation for more information." }];
+                *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUNoPublicDSAFoundError userInfo:@{ NSLocalizedDescriptionKey: @"For security reasons, updates need to be signed with an EdDSA key. See Sparkle's documentation for more information." }];
             }
             return NO;
         } else {
@@ -222,7 +231,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
                 // Deprecated because we pass the downloaded archive to the installer and the installer has no way of knowing where the download came from.
                 // Even if it did, the server and the download on it could still be compromised. But if a DSA signature was used, the private key should
                 // not be stored on the server serving the update
-                SULog(SULogLevelDefault, @"DEPRECATION: Serving updates without a DSA key is now deprecated and may be removed from a future release. See Sparkle's documentation for more information.");
+                SULog(SULogLevelDefault, @"DEPRECATION: Serving updates without an EdDSA key is now deprecated and may be removed from a future release. See Sparkle's documentation for more information.");
                 
                 self.loggedDSAWarning = YES;
             }
@@ -249,7 +258,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         shouldPrompt = NO;
     }
     // Does the delegate want to take care of the logic for when we should ask permission to update?
-    else if ([self.delegate respondsToSelector:@selector(updaterShouldPromptForPermissionToCheckForUpdates:)]) {
+    else if ([self.delegate respondsToSelector:@selector((updaterShouldPromptForPermissionToCheckForUpdates:))]) {
         shouldPrompt = [self.delegate updaterShouldPromptForPermissionToCheckForUpdates:self];
     }
     // Has the user been asked already? And don't ask if the host has a default value set in its Info.plist.
@@ -263,9 +272,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     }
 
     if (shouldPrompt) {
-        NSArray<NSDictionary<NSString *, NSString *> *> *profileInfo = [SUSystemProfiler systemProfileArrayForHost:self.host];
+        NSArray<NSDictionary<NSString *, NSString *> *> *profileInfo = self.systemProfileArray;
         // Always say we're sending the system profile here so that the delegate displays the parameters it would send.
-        if ([self.delegate respondsToSelector:@selector(feedParametersForUpdater:sendingSystemProfile:)]) {
+        if ([self.delegate respondsToSelector:@selector((feedParametersForUpdater:sendingSystemProfile:))]) {
             NSArray *feedParameters = [self.delegate feedParametersForUpdater:self sendingSystemProfile:YES];
             if (feedParameters != nil) {
                 profileInfo = [profileInfo arrayByAddingObjectsFromArray:feedParameters];
@@ -311,9 +320,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)updateLastUpdateCheckDate
 {
-    [self willChangeValueForKey:NSStringFromSelector(@selector(lastUpdateCheckDate))];
+    [self willChangeValueForKey:NSStringFromSelector(@selector((lastUpdateCheckDate)))];
     [self.host setObject:[NSDate date] forUserDefaultsKey:SULastCheckTimeKey];
-    [self didChangeValueForKey:NSStringFromSelector(@selector(lastUpdateCheckDate))];
+    [self didChangeValueForKey:NSStringFromSelector(@selector((lastUpdateCheckDate)))];
 }
 
 - (void)scheduleNextUpdateCheck
@@ -494,7 +503,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
     [self updateLastUpdateCheckDate];
 
-    if( [self.delegate respondsToSelector: @selector(updaterMayCheckForUpdates:)] && ![self.delegate updaterMayCheckForUpdates:self] )
+    if( [self.delegate respondsToSelector: @selector((updaterMayCheckForUpdates:))] && ![self.delegate updaterMayCheckForUpdates:self] )
 	{
         [self scheduleNextUpdateCheck];
         return;
@@ -605,8 +614,8 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (void)setFeedURL:(NSURL * _Nullable)feedURL
 {
     if (![NSThread isMainThread]) {
-        SULog(SULogLevelError, @"This method must be called on the main thread");
-        abort();
+        SULog(SULogLevelError, @"Error: SPUUpdater -setFeedURL: must be called on the main thread. The call from a background thread was ignored.");
+        return;
     }
 
     // When feedURL is nil, -absoluteString will return nil and will remove the user default key
@@ -616,13 +625,16 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (BOOL)retrieveFeedURL:(NSURL * __autoreleasing *)feedURL error:(NSError * __autoreleasing *)error
 {
     if (![NSThread isMainThread]) {
-        SULog(SULogLevelError, @"This method must be called on the main thread");
-        abort();
+        SULog(SULogLevelError, @"Error: SPUUpdater -retrieveFeedURL:error: must be called on the main thread.");
+        if (error != NULL) {
+            *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUIncorrectAPIUsageError userInfo:@{ NSLocalizedDescriptionKey: @"SUUpdater -retriveFeedURL:error: must be called on the main thread."}];
+        }
+        return NO;
     }
     
     // A value in the user defaults overrides one in the Info.plist (so preferences panels can be created wherein users choose between beta / release feeds).
     NSString *appcastString = [self.host objectForKey:SUFeedURLKey];
-    if ([self.delegate respondsToSelector:@selector(feedURLStringForUpdater:)]) {
+    if ([self.delegate respondsToSelector:@selector((feedURLStringForUpdater:))]) {
         NSString *delegateAppcastString = [self.delegate feedURLStringForUpdater:self];
         if (delegateAppcastString != nil) {
             appcastString = delegateAppcastString;
@@ -648,14 +660,14 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     return YES;
 }
 
-// A client may call this method but do not invoke this method ourselves because its unsafe
+// A client may call this method but do not invoke this method ourselves because it's unsafe
 - (NSURL *)feedURL
 {
     NSURL *feedURL = nil;
     NSError *feedError = nil;
     if (![self retrieveFeedURL:&feedURL error:&feedError]) {
-        SULog(SULogLevelError, @"Fatal Feed Error (%ld): %@", feedError.code, feedError.localizedDescription);
-        abort();
+        SULog(SULogLevelError, @"Feed Error (%ld): %@", feedError.code, feedError.localizedDescription);
+        return nil;
     }
     return feedURL;
 }
@@ -719,7 +731,7 @@ static NSString *escapeURLComponent(NSString *str) {
     sendingSystemProfile &= (-[lastSubmitDate timeIntervalSinceNow] >= oneWeek);
 
     NSArray<NSDictionary<NSString *, NSString *> *> *parameters = @[];
-    if ([self.delegate respondsToSelector:@selector(feedParametersForUpdater:sendingSystemProfile:)]) {
+    if ([self.delegate respondsToSelector:@selector((feedParametersForUpdater:sendingSystemProfile:))]) {
         NSArray *feedParameters = [self.delegate feedParametersForUpdater:self sendingSystemProfile:sendingSystemProfile];
         if (feedParameters != nil) {
             parameters = [parameters arrayByAddingObjectsFromArray:feedParameters];
@@ -727,7 +739,7 @@ static NSString *escapeURLComponent(NSString *str) {
     }
 	if (sendingSystemProfile)
 	{
-        parameters = [parameters arrayByAddingObjectsFromArray:[SUSystemProfiler systemProfileArrayForHost:self.host]];
+        parameters = [parameters arrayByAddingObjectsFromArray:self.systemProfileArray];
         [self.host setObject:[NSDate date] forUserDefaultsKey:SULastProfileSubmitDateKey];
     }
 	if ([parameters count] == 0) { return baseFeedURL; }
@@ -735,7 +747,7 @@ static NSString *escapeURLComponent(NSString *str) {
     // Build up the parameterized URL.
     NSMutableArray *parameterStrings = [NSMutableArray array];
     for (NSDictionary<NSString *, NSString *> *currentProfileInfo in parameters) {
-        [parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", escapeURLComponent([[currentProfileInfo objectForKey:@"key"] description]), escapeURLComponent([[currentProfileInfo objectForKey:@"value"] description])]];
+        [parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", escapeURLComponent([currentProfileInfo objectForKey:@"key"]), escapeURLComponent([currentProfileInfo objectForKey:@"value"])]];
     }
 
     NSString *separatorCharacter = @"?";
@@ -750,6 +762,22 @@ static NSString *escapeURLComponent(NSString *str) {
         SULog(SULogLevelError, @"Unexpected error: parameterized feed URL formed from %@ is invalid", appcastStringWithProfile);
     }
     return parameterizedFeedURL;
+}
+
+- (NSArray<NSDictionary<NSString *, NSString *> *> *)systemProfileArray {
+    NSArray *systemProfile = [SUSystemProfiler systemProfileArrayForHost:self.host];
+    if ([self.delegate respondsToSelector:@selector(allowedSystemProfileKeysForUpdater:)]) {
+        NSArray * allowedKeys = [self.delegate allowedSystemProfileKeysForUpdater:self];
+        NSMutableArray *filteredProfile = [NSMutableArray array];
+        for (NSDictionary *profileElement in systemProfile) {
+            NSString *key = [profileElement objectForKey:@"key"];
+            if (key && [allowedKeys containsObject:key]) {
+                [filteredProfile addObject:profileElement];
+            }
+        }
+        systemProfile = [filteredProfile copy];
+    }
+    return systemProfile;
 }
 
 - (void)setUpdateCheckInterval:(NSTimeInterval)updateCheckInterval

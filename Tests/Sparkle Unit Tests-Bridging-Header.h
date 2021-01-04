@@ -8,12 +8,15 @@
 #import "SUPipedUnarchiver.h"
 #import "SUBinaryDeltaCommon.h"
 #import "SUFileManager.h"
-#import <Sparkle/SUExport.h>
+#import "SUExport.h"
 #import "SUAppcast.h"
-#import <Sparkle/SUAppcastItem.h>
+#import "SUAppcastItem.h"
 #import "SUAppcastDriver.h"
-#import <Sparkle/SUVersionComparisonProtocol.h>
-#import <Sparkle/SUStandardVersionComparator.h>
+#import "SUVersionComparisonProtocol.h"
+#import "SUStandardVersionComparator.h"
+#import "SUUpdateValidator.h"
+#import "SUHost.h"
+#import "SUSignatures.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -38,7 +41,7 @@ static const char *SUAppleQuarantineIdentifier = "com.apple.quarantine";
 
 @interface SUAppcast (Private)
 
--(NSArray * _Nullable)parseAppcastItemsFromXMLData:(NSData *)appcastData error:(NSError *__autoreleasing*)errorp;
+-(nullable NSArray *)parseAppcastItemsFromXMLData:(NSData *)appcastData relativeToURL:(nullable NSURL *)appcastURL error:(NSError *__autoreleasing*)errorp;
 
 @end
 

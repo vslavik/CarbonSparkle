@@ -8,14 +8,14 @@
 
 #import "SPUUIBasedUpdateDriver.h"
 #import "SPUCoreBasedUpdateDriver.h"
-#import <Sparkle/SPUUserDriver.h>
+#import "SPUUserDriver.h"
 #import "SUHost.h"
 #import "SUConstants.h"
 #import "SPUUpdaterDelegate.h"
 #import "SUAppcastItem.h"
-#import <Sparkle/SUErrors.h>
+#import "SUErrors.h"
 #import "SPUURLDownload.h"
-#import <Sparkle/SPUDownloadData.h>
+#import "SPUDownloadData.h"
 #import "SPUResumableUpdate.h"
 
 
@@ -189,7 +189,7 @@
                 break;
             case SPUDownloadUpdateCanceled:
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if ([self.updaterDelegate respondsToSelector:@selector(userDidCancelDownload:)]) {
+                    if ([self.updaterDelegate respondsToSelector:@selector((userDidCancelDownload:))]) {
                         [self.updaterDelegate userDidCancelDownload:self.updater];
                     }
                     

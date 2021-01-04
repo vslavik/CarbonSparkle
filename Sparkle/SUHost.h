@@ -7,6 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
+@class SUPublicKeys;
+
 @interface SUHost : NSObject
 
 @property (strong, readonly) NSBundle *bundle;
@@ -18,8 +20,10 @@
 @property (readonly, copy) NSString *version;
 @property (readonly, nonatomic) BOOL validVersion;
 @property (readonly, copy) NSString *displayVersion;
+@property (readonly) SUPublicKeys *publicKeys;
+
 @property (getter=isRunningOnReadOnlyVolume, readonly) BOOL runningOnReadOnlyVolume;
-@property (readonly, copy) NSString *publicDSAKey;
+@property (getter=isRunningTranslocated, readonly) BOOL runningTranslocated;
 @property (readonly, nonatomic, copy) NSString *publicDSAKeyFileKey;
 
 - (id)objectForInfoDictionaryKey:(NSString *)key;

@@ -9,7 +9,7 @@
 #import "SUPipedUnarchiver.h"
 #import "SUUnarchiverNotifier.h"
 #import "SULog.h"
-#import <Sparkle/SUErrors.h>
+#import "SUErrors.h"
 
 
 #include "AppKitPrevention.h"
@@ -58,7 +58,7 @@
     return ([self commandAndArgumentsConformingToTypeOfPath:path] != nil);
 }
 
-+ (BOOL)unsafeIfArchiveIsNotValidated
++ (BOOL)mustValidateBeforeExtraction
 {
     return NO;
 }

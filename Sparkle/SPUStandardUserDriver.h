@@ -7,14 +7,16 @@
 //
 
 #if __has_feature(modules)
+#if __has_warning("-Watimport-in-framework-header")
+#pragma clang diagnostic ignored "-Watimport-in-framework-header"
+#endif
 @import Cocoa;
 #else
 #import <Cocoa/Cocoa.h>
 #endif
-
-#import <Sparkle/SPUUserDriver.h>
-#import <Sparkle/SPUStandardUserDriverProtocol.h>
-#import <Sparkle/SUExport.h>
+#import "SPUUserDriver.h"
+#import "SPUStandardUserDriverProtocol.h"
+#import "SUExport.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

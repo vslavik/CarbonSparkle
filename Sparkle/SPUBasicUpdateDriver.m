@@ -8,8 +8,8 @@
 
 #import "SPUBasicUpdateDriver.h"
 #import "SUAppcastDriver.h"
-#import <Sparkle/SPUUpdaterDelegate.h>
-#import <Sparkle/SUErrors.h>
+#import "SPUUpdaterDelegate.h"
+#import "SUErrors.h"
 #import "SULog.h"
 #import "SULocalizations.h"
 #import "SUHost.h"
@@ -69,6 +69,8 @@
     if ([self.host isRunningOnReadOnlyVolume])
     {
         [self.delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningFromDiskImageError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedString(@"%1$@ can't be updated, because it was opened from a read-only or a temporary location. Use Finder to copy %1$@ to the Applications folder, relaunch it from there, and try again.", nil), [self.host name]] }]];
+    } else if ([self.host isRunningTranslocated]) {
+        [self.delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningTranslocated userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedString(@"%1$@ can’t be updated if it’s running from the location it was downloaded to.", nil), [self.host name]] }]];
     } else {
         [self.appcastDriver loadAppcastFromURL:appcastURL userAgent:userAgent httpHeaders:httpHeaders inBackground:background includesSkippedUpdates:includesSkippedUpdates];
     }
@@ -129,7 +131,7 @@
 - (void)didFinishLoadingAppcast:(SUAppcast *)appcast
 {
     if (!self.aborted) {
-        if ([self.updaterDelegate respondsToSelector:@selector(updater:didFinishLoadingAppcast:)]) {
+        if ([self.updaterDelegate respondsToSelector:@selector((updater:didFinishLoadingAppcast:))]) {
             [self.updaterDelegate updater:self.updater didFinishLoadingAppcast:appcast];
         }
         
@@ -144,7 +146,7 @@
                                                             object:self.updater
                                                           userInfo:@{ SUUpdaterAppcastItemNotificationKey: updateItem }];
         
-        if ([self.updaterDelegate respondsToSelector:@selector(updater:didFindValidUpdate:)]) {
+        if ([self.updaterDelegate respondsToSelector:@selector((updater:didFindValidUpdate:))]) {
             [self.updaterDelegate updater:self.updater didFindValidUpdate:updateItem];
         }
         
@@ -155,7 +157,7 @@
 - (void)didNotFindUpdate
 {
     if (!self.aborted) {
-        if ([self.updaterDelegate respondsToSelector:@selector(updaterDidNotFindUpdate:)]) {
+        if ([self.updaterDelegate respondsToSelector:@selector((updaterDidNotFindUpdate:))]) {
             [self.updaterDelegate updaterDidNotFindUpdate:self.updater];
         }
         [[NSNotificationCenter defaultCenter] postNotificationName:SUUpdaterDidNotFindUpdateNotification object:self.updater];
@@ -187,7 +189,7 @@
         }
         
         // Notify host app that updater has aborted
-        if ([self.updaterDelegate respondsToSelector:@selector(updater:didAbortWithError:)]) {
+        if ([self.updaterDelegate respondsToSelector:@selector((updater:didAbortWithError:))]) {
             [self.updaterDelegate updater:self.updater didAbortWithError:(NSError * _Nonnull)error];
         }
     }

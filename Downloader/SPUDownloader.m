@@ -10,8 +10,8 @@
 #import "SPUDownloaderDelegate.h"
 #import "SPULocalCacheDirectory.h"
 #import "SPUURLRequest.h"
-#import <Sparkle/SPUDownloadData.h>
-#import <Sparkle/SUErrors.h>
+#import "SPUDownloadData.h"
+#import "SUErrors.h"
 
 
 #include "AppKitPrevention.h"
@@ -208,7 +208,17 @@ static NSString *SUDownloadingReason = @"Downloading update related file";
         if (data != nil) {
             NSURLResponse *response = self.download.response;
             assert(response != nil);
-            downloadData = [[SPUDownloadData alloc] initWithData:data textEncodingName:response.textEncodingName MIMEType:response.MIMEType];
+
+            NSURL *responseURL = response.URL;
+            if (responseURL == nil) {
+                responseURL = self.download.currentRequest.URL;
+            }
+            if (responseURL == nil) {
+                responseURL = self.download.originalRequest.URL;
+            }
+            assert(responseURL != nil);
+
+            downloadData = [[SPUDownloadData alloc] initWithData:data URL:responseURL textEncodingName:response.textEncodingName MIMEType:response.MIMEType];
         }
     }
     

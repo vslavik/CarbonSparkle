@@ -10,6 +10,7 @@
 #import "SUConstants.h"
 #include <sys/mount.h> // For statfs for isRunningOnReadOnlyVolume
 #import "SULog.h"
+#import "SUSignatures.h"
 
 
 #include "AppKitPrevention.h"
@@ -26,6 +27,7 @@
 @property (nonatomic, readonly) BOOL isMainBundle;
 @property (copy) NSString *defaultsDomain;
 @property (assign) BOOL usesStandardUserDefaults;
+@property (readonly, copy) NSString *publicDSAKey;
 
 @end
 
@@ -105,7 +107,8 @@
     NSString *version = [self _version];
     if (version == nil) {
         SULog(SULogLevelError, @"This host (%@) has no %@! This attribute is required.", [self bundlePath], (__bridge NSString *)kCFBundleVersionKey);
-        abort();
+        // Instead of abort()-ing, return an empty string to satisfy the _Nonnull contract.
+        return @"";
     }
     return version;
 }
@@ -124,6 +127,17 @@
     struct statfs statfs_info;
     statfs([[self.bundle bundlePath] fileSystemRepresentation], &statfs_info);
     return (statfs_info.f_flags & MNT_RDONLY) != 0;
+}
+
+- (BOOL)isRunningTranslocated
+{
+    NSString *path = [self.bundle bundlePath];
+    return [path rangeOfString:@"/AppTranslocation/"].location != NSNotFound;
+}
+
+- (NSString *_Nullable)publicEDKey
+{
+    return [self objectForInfoDictionaryKey:SUPublicEDKeyKey];
 }
 
 - (NSString *_Nullable)publicDSAKey
@@ -152,9 +166,14 @@
     return key;
 }
 
+- (SUPublicKeys *)publicKeys
+{
+    return [[SUPublicKeys alloc] initWithDsa:[self publicDSAKey] ed:[self publicEDKey]];
+}
+
 - (NSString * _Nullable)publicDSAKeyFileKey
 {
-    return [self objectForInfoDictionaryKey:SUPublicDSAKeyFileKey];;
+    return [self objectForInfoDictionaryKey:SUPublicDSAKeyFileKey];
 }
 
 - (id)objectForInfoDictionaryKey:(NSString *)key
@@ -225,7 +244,7 @@
 	}
 	else
 	{
-        value = (BOOL)CFBooleanGetValue((CFBooleanRef)plr);
+        value = CFBooleanGetValue((CFBooleanRef)plr) ? YES : NO;
         CFRelease(plr);
     }
     return value;

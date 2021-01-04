@@ -6,10 +6,11 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import <Sparkle/SUAppcastItem.h>
-#import <Sparkle/SUVersionComparisonProtocol.h>
+#import "SUAppcastItem.h"
+#import "SUVersionComparisonProtocol.h"
 #import "SULog.h"
 #import "SUConstants.h"
+#import "SUSignatures.h"
 #import "SPUInstallationType.h"
 
 
@@ -17,7 +18,7 @@
 
 static NSString *SUAppcastItemDeltaUpdatesKey = @"deltaUpdates";
 static NSString *SUAppcastItemDisplayVersionStringKey = @"displayVersionString";
-static NSString *SUAppcastItemDSASignatureKey = @"DSASignature";
+static NSString *SUAppcastItemSignaturesKey = @"signatures";
 static NSString *SUAppcastItemFileURLKey = @"fileURL";
 static NSString *SUAppcastItemInfoURLKey = @"infoURL";
 static NSString *SUAppcastItemContentLengthKey = @"contentLength";
@@ -35,7 +36,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
 @synthesize dateString = _dateString;
 @synthesize deltaUpdates = _deltaUpdates;
 @synthesize displayVersionString = _displayVersionString;
-@synthesize DSASignature = _DSASignature;
+@synthesize signatures = _signatures;
 @synthesize fileURL = _fileURL;
 @synthesize contentLength = _contentLength;
 @synthesize infoURL = _infoURL;
@@ -61,7 +62,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
     if (self != nil) {
         _deltaUpdates = [decoder decodeObjectOfClasses:[NSSet setWithArray:@[[NSDictionary class], [SUAppcastItem class]]] forKey:SUAppcastItemDeltaUpdatesKey];
         _displayVersionString = [(NSString *)[decoder decodeObjectOfClass:[NSString class] forKey:SUAppcastItemDisplayVersionStringKey] copy];
-        _DSASignature = [(NSString *)[decoder decodeObjectOfClass:[NSString class] forKey:SUAppcastItemDSASignatureKey] copy];
+        _signatures = (SUSignatures *)[decoder decodeObjectOfClass:[SUSignatures class] forKey:SUAppcastItemSignaturesKey];
         _fileURL = [decoder decodeObjectOfClass:[NSURL class] forKey:SUAppcastItemFileURLKey];
         _infoURL = [decoder decodeObjectOfClass:[NSURL class] forKey:SUAppcastItemInfoURLKey];
         
@@ -94,8 +95,8 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         [encoder encodeObject:self.displayVersionString forKey:SUAppcastItemDisplayVersionStringKey];
     }
     
-    if (self.DSASignature != nil) {
-        [encoder encodeObject:self.DSASignature forKey:SUAppcastItemDSASignatureKey];
+    if (self.signatures != nil) {
+        [encoder encodeObject:self.signatures forKey:SUAppcastItemSignaturesKey];
     }
     
     if (self.fileURL != nil) {
@@ -164,10 +165,15 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
 
 - (instancetype)initWithDictionary:(NSDictionary *)dict
 {
-    return [self initWithDictionary:dict failureReason:nil];
+    return [self initWithDictionary:dict relativeToURL:nil failureReason:nil];
 }
 
 - (instancetype)initWithDictionary:(NSDictionary *)dict failureReason:(NSString *__autoreleasing *)error
+{
+    return [self initWithDictionary:dict relativeToURL:nil failureReason:error];
+}
+
+- (instancetype)initWithDictionary:(NSDictionary *)dict relativeToURL:(NSURL *)appcastURL failureReason:(NSString *__autoreleasing *)error
 {
     self = [super init];
     if (self) {
@@ -214,7 +220,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
             if (![theInfoURL isKindOfClass:[NSString class]]) {
                 SULog(SULogLevelError, @"%@ -%@ Info URL is not of valid type.", NSStringFromClass([self class]), NSStringFromSelector(_cmd));
             } else {
-                _infoURL = [NSURL URLWithString:theInfoURL];
+                _infoURL = [NSURL URLWithString:theInfoURL relativeToURL:appcastURL];
             }
         }
 
@@ -247,10 +253,10 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         if (enclosureURLString) {
             // Sparkle used to always URL-encode, so for backwards compatibility spaces in URLs must be forgiven.
             NSString *fileURLString = [enclosureURLString stringByReplacingOccurrencesOfString:@" " withString:@"%20"];
-            _fileURL = [NSURL URLWithString:fileURLString];
+            _fileURL = [NSURL URLWithString:fileURLString relativeToURL:appcastURL];
         }
         if (enclosure) {
-            _DSASignature = [(NSString *)[enclosure objectForKey:SUAppcastAttributeDSASignature] copy];
+            _signatures = [[SUSignatures alloc] initWithDsa:[enclosure objectForKey:SUAppcastAttributeDSASignature] ed:[enclosure objectForKey:SUAppcastAttributeEDSignature]];
         }
 
         _versionString = [(NSString *)newVersion copy];
@@ -283,7 +289,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         // Find the appropriate release notes URL.
         NSString *releaseNotesString = [dict objectForKey:SUAppcastElementReleaseNotesLink];
         if (releaseNotesString) {
-            NSURL *url = [NSURL URLWithString:releaseNotesString];
+            NSURL *url = [NSURL URLWithString:releaseNotesString relativeToURL:appcastURL];
             if ([url isFileURL]) {
                 SULog(SULogLevelError, @"Release notes with file:// URLs are not supported");
             } else {

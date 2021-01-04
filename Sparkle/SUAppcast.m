@@ -6,17 +6,17 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import <Sparkle/SUExport.h>
-#import <Sparkle/SUAppcast.h>
-#import <Sparkle/SUAppcastItem.h>
-#import <Sparkle/SUVersionComparisonProtocol.h>
+#import "SUExport.h"
+#import "SUAppcast.h"
+#import "SUAppcastItem.h"
+#import "SUVersionComparisonProtocol.h"
 #import "SUConstants.h"
 #import "SULog.h"
-#import <Sparkle/SUErrors.h>
+#import "SUErrors.h"
 #import "SULocalizations.h"
 #import "SPUXPCServiceInfo.h"
 #import "SPUURLDownload.h"
-#import <Sparkle/SPUDownloadData.h>
+#import "SPUDownloadData.h"
 
 
 #include "AppKitPrevention.h"
@@ -85,7 +85,7 @@
     SPUDownloadURLWithRequest(request, ^(SPUDownloadData * _Nullable downloadData, NSError * _Nullable error) {
         if (downloadData != nil) {
             NSError *parseError = nil;
-            NSArray *appcastItems = [self parseAppcastItemsFromXMLData:downloadData.data error:&parseError];
+            NSArray *appcastItems = [self parseAppcastItemsFromXMLData:downloadData.data relativeToURL:downloadData.URL error:&parseError];
             
             if (appcastItems != nil) {
                 self.items = appcastItems;
@@ -105,9 +105,14 @@
         } else {
             SULog(SULogLevelError, @"Encountered download feed error: %@", error);
             
-            NSDictionary *userInfo = [NSDictionary
-                                      dictionaryWithObject: SULocalizedString(@"An error occurred while downloading the update feed.", nil)
-                                      forKey: NSLocalizedDescriptionKey];
+            NSMutableDictionary *userInfo = [NSMutableDictionary
+                                             dictionaryWithObject: SULocalizedString(@"An error occurred while downloading the update feed.", nil)
+                                             forKey: NSLocalizedDescriptionKey];
+            
+            if (error != nil) {
+                NSError *assignedError = error;                                     // Silences a Clang warning about implicit conversion from Nullable to Nonnull.
+                [userInfo setObject:assignedError forKey:NSUnderlyingErrorKey];
+            }
             
             [self reportError:[NSError errorWithDomain:SUSparkleErrorDomain
                                                   code:SUDownloadError
@@ -146,7 +151,7 @@
     }
 }
 
--(NSArray *)parseAppcastItemsFromXMLData:(NSData *)appcastData error:(NSError *__autoreleasing*)errorp {
+-(NSArray *)parseAppcastItemsFromXMLData:(NSData *)appcastData relativeToURL:(NSURL *)appcastURL error:(NSError *__autoreleasing*)errorp {
     if (errorp) {
         *errorp = nil;
     }
@@ -238,7 +243,7 @@
         }
 
         NSString *errString;
-        SUAppcastItem *anItem = [[SUAppcastItem alloc] initWithDictionary:dict failureReason:&errString];
+        SUAppcastItem *anItem = [[SUAppcastItem alloc] initWithDictionary:dict relativeToURL:appcastURL failureReason:&errString];
         if (anItem) {
             [appcastItems addObject:anItem];
 		}
@@ -258,12 +263,17 @@
 
 - (void)reportError:(NSError *)error
 {
-    NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:@{
-        NSLocalizedDescriptionKey: SULocalizedString(@"An error occurred in retrieving update information. Please try again later.", nil),
-        NSLocalizedFailureReasonErrorKey: [error localizedDescription],
-        NSUnderlyingErrorKey: error,
-    }];
-
+    NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
+    
+    if (!userInfo)
+    {
+        userInfo = [[NSMutableDictionary alloc] initWithDictionary:@{
+            NSLocalizedDescriptionKey: SULocalizedString(@"An error occurred in retrieving update information. Please try again later.", nil),
+            NSLocalizedFailureReasonErrorKey: [error localizedDescription],
+            NSUnderlyingErrorKey: error,
+        }];
+    }
+    
     NSURL *failingUrl = [error.userInfo objectForKey:NSURLErrorFailingURLErrorKey];
     if (failingUrl) {
         [userInfo setObject:failingUrl forKey:NSURLErrorFailingURLErrorKey];
