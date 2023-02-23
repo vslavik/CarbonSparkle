@@ -1993,7 +1993,7 @@
 			attributes = {
 				CLASSPREFIX = SU;
 				LastSwiftUpdateCheck = 0800;
-				LastUpgradeCheck = 1130;
+				LastUpgradeCheck = 1340;
 				ORGANIZATIONNAME = "Sparkle Project";
 				TargetAttributes = {
 					5A5ADED6214EDE4900DF0099 = {
@@ -2751,7 +2751,6 @@
 				1A985A4B1C5C32B60001163A /* fr-CA */,
 				1A985A3D1C5C32A80001163A /* he */,
 				26B1A4692195FFE900B09783 /* hr */,
-				0A8DAD77207FA6F400FFD934 /* hu */,
 				1A985A3F1C5C32AA0001163A /* id */,
 				1A985A401C5C32AA0001163A /* is */,
 				1A985A361C5C32A20001163A /* it */,
